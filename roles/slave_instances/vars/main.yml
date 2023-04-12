@@ -1,0 +1,13 @@
+---
+# vars file for master_instance
+region: ap-south-1
+image_id: ami-0fdea1353c525c182 
+instance_type: t2.micro
+subnet_id: subnet-02aaa47ef1e5cbd35
+security_group: default
+key: newkey
+instance_count: 2
+aws_access_key: AKIAQXTEG5FLYDHJDTYW
+aws_secret_key: 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
+path_to_hostfile: /root/ip
+key_name: newkey.pem

@@ -1,0 +1,6 @@
+- hosts: [tag_work_master]
+  tasks:
+    - name: copying
+      copy:
+        src: /root/roles/master/files/docker.repo
+        dest: /etc/yum.repos.d/docker.repo

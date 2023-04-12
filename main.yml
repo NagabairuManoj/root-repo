@@ -1,0 +1,8 @@
+- hosts: [tag_work_master]
+  roles:
+    - name: "master creation"
+      role: master
+- hosts: [tag_work_slave]
+  roles:
+    - name: "slave creation"
+      role: slave
