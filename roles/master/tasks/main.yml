@@ -1,93 +1,79 @@
-          - name: for_docker_repo
-            copy:
-                    src: docker.repo
-                    dest: /etc/yum.repos.d/docker.repo
-          - name: installing docker
-            command: "yum install docker-ce --nobest -y"
-          - name: installing pip
-            yum:
-                    name:
-                          - pip
-                    state: present
-
-          - name: for fixing cgroup driver
-            command: "mkdir /sys/fs/cgroup/devices"
-            command: "mount -t cgroup -o devices devices /sys/fs/cgroup/devices"
-
-          - name: starting services
-            service:
-                    name: docker
-                    state: started
-                    enabled: yes
-
-          - name: installing docker package
-            pip:
-                    name: docker
-                    executable: pip3
-
-          - name: copying kub.sh file
-            copy:
-                    src: kub.sh
-                    dest: /kub.sh
-
-          - name: k8s installing          
-            command: "bash /kub.sh"
-          - name: starting kubelet service
-            service:
-                    name: kubelet
-                    state: started
-                    enabled: yes
-
-          - name: correcting the CRI error
-            command: "rm -f /etc/containerd/config.toml "
-
-          - name: restarting conatinerd
-            service:
-                    name: containerd
-                    state: restarted
-
-          - name: changing driver
-            copy:
-                   dest: /etc/docker/daemon.json
-                   content: |
-                           {
-                             "exec-opts": ["native.cgroupdriver=systemd"]
-                           }
-
-          - name: restarting docker service
-            service:
-                   name: docker
-                   state: restarted
-
-          - name: installing iproutetc
-            yum:
-                   name:
-                         - iproute-tc
-                   state: present
-
-          - name: initiating kubeadm
-            command: "kubeadm init --apiserver-advertise-address=10.1.0.5 --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=NumCPU --ignore-preflight-errors=Mem"
-
-          - name: creating token
-            shell: " kubeadm token create --print-join-command >> token.sh"
-
-          - name: fetching token
-            fetch:
-                   src: /home/paromita/token.sh
-                   dest: /tmp/token.sh
-                   flat: yes
-
-          - name: creating kctl.sh
-            copy:
-                   dest: /tmp/kctl.sh
-                   content: |
-                           mkdir -p $HOME/.kube
-                            sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-                            sudo chown $(id -u):$(id -g) $HOME/.kube/config
-
-          - name: running kctl.sh
-            shell: bash /tmp/kctl.sh
-
-          - name: applying flannel
-            command: "kubectl apply  -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml"
-
+- name: disable swap space
+  command: swapoff -a
+  become: yes
+- name: for disabling selinux
+  selinux:
+          state: disabled
+  become: yes
+- name: enable two crucial kernel modules overlay and br_netfilter modules.
+  copy:
+          dest: /etc/modules-load.d/k8s.conf
+          content: |
+                  overlay
+                  br_netfilter
+  become: yes
+- name: loading the modules
+  command: modprobe overlay
+  become: yes
+- name: loading the modules
+  command: modprobe br_netfilter
+  become: yes
+- name: for ip-tables
+  copy:
+          dest: /etc/sysctl.d/k8s.conf
+          content: |
+                  net.bridge.bridge-nf-call-ip6tables = 1
+                  net.ipv4.ip_forward = 1
+                  net.bridge.bridge-nf-call-iptables = 1
+  become: yes
+- name: restarting the sysctl
+  command: sysctl --system
+  become: yes
+- name: cri-o repo
+  command: "curl -L -o /etc/yum.repos.d/devel:kubic:libcontainers:stable.repo https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/CentOS_8/devel:kubic:libcontainers:stable.repo"
+  become: yes
+- name: cri-o repo
+  command: "curl -L -o /etc/yum.repos.d/devel:kubic:libcontainers:stable:cri-o:1.26.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:1.26/CentOS_8/devel:kubic:libcontainers:stable:cri-o:1.26.repo"
+  become: yes
+- name: installing cri-o
+  yum:
+          name: cri-o
+          state: present
+  become: yes
+- name: starting the cri-o
+  service:
+          name: crio
+          state: started
+          enabled: yes
+  become: yes
+- name: copying the kub.sh
+  copy:
+          src: kub.sh
+          dest: /kub.sh
+- name: installing k8s
+  command: "bash /kub.sh"
+- name: starting kubelet service
+  service:
+          name: kubelet
+          state: started
+          enabled: yes
+- name: initiating kubeadm
+  command: kubeadm init --pod-network-cidr=192.168.10.0/16
+- name: creating token
+  shell: "kubeadm token create --print-join-command >> token.sh"
+- name: fetching token
+  fetch:
+          src: /home/ec2-user/token.sh
+          dest: /tmp/token.sh
+          flat: yes
+- name: creating kctl.sh
+  copy:
+        dest: /tmp/kctl.sh
+        content: |
+                mkdir -p $HOME/.kube
+                sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+                sudo chown $(id -u):$(id -g) $HOME/.kube/config
+- name: running kctl.sh
+  shell: "bash /tmp/kctl.sh"
+- name: installing calico
+  shell: "kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.25.0/manifests/calico.yaml"
